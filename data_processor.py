@@ -149,8 +149,8 @@ def build_variant_rows(
     Each row contains:
     - Campaign information
     - Sequence information
-    - Variant metrics (aggregated by label)
-    - Campaign-level statistics
+    - Variant metrics
+    - Campaign-level analytics
 
     Args:
         campaigns: List of campaign dictionaries
@@ -161,81 +161,79 @@ def build_variant_rows(
     Returns:
         List of variant rows with all combined data
     """
-    # Get campaign stats
-    campaign_stats = calculate_campaign_stats(campaign_analytics, campaigns)
-
-    # Get aggregated variant performance
-    aggregated_variants = aggregate_variant_performance(
-        variant_stats_by_campaign,
-        campaign_sequences
-    )
-
-    # Build rows
     rows = []
+    campaigns_by_id = {c["id"]: c for c in campaigns if c.get("id") is not None}
 
-    for campaign in campaigns:
-        campaign_id = campaign.get("id")
-        if campaign_id is None:
+    for campaign_id, sequences in campaign_sequences.items():
+        camp = campaigns_by_id.get(campaign_id)
+        if not camp:
             continue
 
-        # Skip if no campaign stats
-        if campaign_id not in campaign_stats:
-            continue
+        c_metrics = campaign_analytics.get(campaign_id, {}) or {}
+        variant_stats_map = variant_stats_by_campaign.get(campaign_id, {}) or {}
 
-        # Skip if no aggregated variants
-        if campaign_id not in aggregated_variants:
-            continue
+        for seq in sequences:
+            seq_id = seq.get("sequence_id")
+            variants = seq.get("variants", []) or []
 
-        stats = campaign_stats[campaign_id]
-        variants = aggregated_variants[campaign_id]
+            for variant in variants:
+                variant_id = variant.get("variant_id")
+                v_metrics = variant_stats_map.get(seq_id, {}).get(variant_id, {}) or {}
 
-        # Get sequences for this campaign
-        sequences = campaign_sequences.get(campaign_id, [])
+                # Default variant metrics
+                v_metrics_default = {
+                    "variant_sent_count": 0,
+                    "variant_open_count": 0,
+                    "variant_click_count": 0,
+                    "variant_reply_count": 0,
+                    "variant_positive_reply_count": 0,
+                    "variant_reply_rate": 0.0,
+                    "variant_positive_reply_rate": 0.0,
+                    "variant_positive_reply_rate_of_replies": 0.0,
+                    "variant_open_rate": 0.0,
+                    "variant_click_rate": 0.0,
+                    "variant_label": variant.get("variant_label", "Unknown"),
+                }
+                v_metrics_full = {**v_metrics_default, **v_metrics}
 
-        for variant in variants:
-            # Find the first sequence that has this variant label
-            variant_label = variant["variant_label"]
-            sequence_info = None
-
-            for sequence in sequences:
-                for v in sequence["variants"]:
-                    if v["variant_label"] == variant_label:
-                        sequence_info = {
-                            "sequence_id": sequence["sequence_id"],
-                            "seq_number": sequence["seq_number"],
-                            "sequence_subject": sequence["sequence_subject"],
-                        }
-                        break
-                if sequence_info:
-                    break
-
-            # If no sequence found, use defaults
-            if not sequence_info:
-                sequence_info = {
-                    "sequence_id": None,
-                    "seq_number": None,
-                    "sequence_subject": "",
+                row = {
+                    # Campaign level
+                    "client_id": camp.get("client_id"),
+                    "campaign_id": campaign_id,
+                    "campaign_name": camp.get("name"),
+                    "campaign_status": camp.get("status"),
+                    "campaign_created_at": camp.get("created_at"),
+                    # Campaign metrics
+                    "campaign_sent_count": c_metrics.get("sent_count", 0),
+                    "campaign_reply_count": c_metrics.get("reply_count", 0),
+                    "campaign_positive_reply_count": c_metrics.get("positive_reply_count", 0),
+                    "campaign_reply_rate": c_metrics.get("reply_rate", 0.0),
+                    "campaign_positive_reply_rate": c_metrics.get("positive_reply_rate", 0.0),
+                    "campaign_positive_reply_rate_of_replies": c_metrics.get("positive_reply_rate_of_replies", 0.0),
+                    "campaign_open_count": c_metrics.get("open_count", 0),
+                    "campaign_click_count": c_metrics.get("click_count", 0),
+                    "campaign_open_rate": c_metrics.get("open_rate", 0.0),
+                    "campaign_click_rate": c_metrics.get("click_rate", 0.0),
+                    # Sequence level
+                    "sequence_id": seq_id,
+                    "sequence_number": seq.get("seq_number"),
+                    "sequence_subject": seq.get("sequence_subject"),
+                    # Variant level
+                    "variant_id": variant_id,
+                    "variant_label": v_metrics_full["variant_label"],
+                    "variant_subject": variant.get("variant_subject", ""),
+                    "variant_sent_count": v_metrics_full["variant_sent_count"],
+                    "variant_open_count": v_metrics_full["variant_open_count"],
+                    "variant_click_count": v_metrics_full["variant_click_count"],
+                    "variant_reply_count": v_metrics_full["variant_reply_count"],
+                    "variant_positive_reply_count": v_metrics_full["variant_positive_reply_count"],
+                    "variant_reply_rate": v_metrics_full["variant_reply_rate"],
+                    "variant_positive_reply_rate": v_metrics_full["variant_positive_reply_rate"],
+                    "variant_positive_reply_rate_of_replies": v_metrics_full["variant_positive_reply_rate_of_replies"],
+                    "variant_open_rate": v_metrics_full["variant_open_rate"],
+                    "variant_click_rate": v_metrics_full["variant_click_rate"],
                 }
 
-            # Build complete row
-            row = {
-                # Campaign info
-                "campaign_id": campaign_id,
-                "campaign_name": campaign.get("name", ""),
-                # Sequence info
-                "sequence_id": sequence_info["sequence_id"],
-                "seq_number": sequence_info["seq_number"],
-                "sequence_subject": sequence_info["sequence_subject"],
-                # Variant info and metrics
-                **variant,
-                # Campaign stats
-                "campaign_reply_rate": stats["campaign_reply_rate"],
-                "campaign_positive_reply_rate": stats["campaign_positive_reply_rate"],
-                "campaign_positive_reply_rate_of_replies": stats["campaign_positive_reply_rate_of_replies"],
-                "campaign_open_rate": stats["campaign_open_rate"],
-                "campaign_click_rate": stats["campaign_click_rate"],
-            }
-
-            rows.append(row)
+                rows.append(row)
 
     return rows
