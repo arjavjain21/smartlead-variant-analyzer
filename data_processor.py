@@ -9,6 +9,18 @@ from collections import defaultdict
 from typing import List, Dict, Any
 
 
+def _safe_int(value: Any) -> int:
+    """Safely convert value to int"""
+    if value is None:
+        return 0
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return 0
+
+
 def _calculate_rate(numerator: int, denominator: int) -> float:
     """
     Calculate percentage rate, handling zero division
@@ -47,17 +59,17 @@ def aggregate_variant_performance(
     })
 
     for row in rows:
-        variant_label = row.get('variant_label', '').strip().upper()
+        variant_label = (row.get('variant_label') or '').strip().upper()
         if not variant_label or variant_label not in ['A', 'B', 'C', 'D', 'E']:
             continue
 
         campaign_id = row.get('campaign_id', '')
 
-        variant_stats[variant_label]['total_sent'] += row.get('variant_sent_count', 0)
-        variant_stats[variant_label]['total_replies'] += row.get('variant_reply_count', 0)
-        variant_stats[variant_label]['total_positive_replies'] += row.get('variant_positive_reply_count', 0)
-        variant_stats[variant_label]['total_opens'] += row.get('variant_open_count', 0)
-        variant_stats[variant_label]['total_clicks'] += row.get('variant_click_count', 0)
+        variant_stats[variant_label]['total_sent'] += _safe_int(row.get('variant_sent_count'))
+        variant_stats[variant_label]['total_replies'] += _safe_int(row.get('variant_reply_count'))
+        variant_stats[variant_label]['total_positive_replies'] += _safe_int(row.get('variant_positive_reply_count'))
+        variant_stats[variant_label]['total_opens'] += _safe_int(row.get('variant_open_count'))
+        variant_stats[variant_label]['total_clicks'] += _safe_int(row.get('variant_click_count'))
         variant_stats[variant_label]['campaign_count'].add(campaign_id)
 
     # Calculate rates and prepare results
@@ -119,9 +131,9 @@ def calculate_campaign_stats(
             }
 
         stats = campaign_stats[campaign_id]
-        stats['total_sent'] += row.get('variant_sent_count', 0)
-        stats['total_replies'] += row.get('variant_reply_count', 0)
-        stats['total_positive'] += row.get('variant_positive_reply_count', 0)
+        stats['total_sent'] += _safe_int(row.get('variant_sent_count'))
+        stats['total_replies'] += _safe_int(row.get('variant_reply_count'))
+        stats['total_positive'] += _safe_int(row.get('variant_positive_reply_count'))
         stats['variant_count'] += 1
 
     # Calculate rates

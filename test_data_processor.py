@@ -2,8 +2,6 @@
 Tests for data processor layer
 """
 import pytest
-from collections import defaultdict
-from datetime import date
 from data_processor import (
     aggregate_variant_performance,
     calculate_campaign_stats
