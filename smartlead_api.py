@@ -2,12 +2,15 @@
 SmartLead API wrapper with retry logic
 """
 import time
+import os
+import logging
 import requests
-from datetime import datetime, date, timedelta, timezone
-from typing import List, Dict, Any, Optional
+from datetime import datetime, date, timezone
+from typing import List, Dict, Any
 
 
-BASE_URL = "https://server.smartlead.ai/api/v1"
+logger = logging.getLogger(__name__)
+BASE_URL = os.getenv("SMARTLEAD_API_URL", "https://server.smartlead.ai/api/v1")
 
 # Retry configuration
 MAX_RETRIES = 3
@@ -48,7 +51,11 @@ def get_with_retry(path: str, params: Dict[str, Any], max_retries: int = MAX_RET
 
     Raises:
         RuntimeError: If request fails after all retries
+        ValueError: If path is empty
     """
+    if not path or not isinstance(path, str):
+        raise ValueError("path must be a non-empty string")
+
     url = f"{BASE_URL}{path}"
 
     for attempt in range(1, max_retries + 1):
@@ -94,7 +101,11 @@ def list_clients(api_key: str) -> List[Dict[str, Any]]:
 
     Raises:
         RuntimeError: If API request fails
+        ValueError: If api_key is empty
     """
+    if not api_key or not isinstance(api_key, str):
+        raise ValueError("api_key must be a non-empty string")
+
     params = {"api_key": api_key}
     data = get_with_retry("/client/", params)
 
@@ -174,10 +185,11 @@ def get_campaign_analytics(
         api_key: SmartLead API key
 
     Returns:
-        Dictionary mapping campaign_id -> analytics metrics
+        Dictionary mapping campaign_id -> analytics metrics.
+        Returns empty dict for campaigns that fail.
 
     Raises:
-        RuntimeError: If API request fails
+        RuntimeError: If API request fails for all campaigns
     """
     start_str = start_date.strftime("%Y-%m-%d")
     end_str = end_date.strftime("%Y-%m-%d")
@@ -201,7 +213,7 @@ def get_campaign_analytics(
             )
         except RuntimeError as e:
             # Log warning but continue with other campaigns
-            print(f"Warning: failed campaign analytics for {campaign_id}: {e}")
+            logger.warning("failed campaign analytics for %s: %s", campaign_id, e)
             data = {}
 
         sent_count = safe_int(data.get("sent_count"))
@@ -245,10 +257,11 @@ def get_campaign_sequences(
         api_key: SmartLead API key
 
     Returns:
-        Dictionary mapping campaign_id -> list of sequences with variants
+        Dictionary mapping campaign_id -> list of sequences with variants.
+        Campaigns that fail are excluded from results.
 
     Raises:
-        RuntimeError: If API request fails
+        RuntimeError: If API request fails for all campaigns
     """
     campaign_sequences = {}
 
@@ -262,7 +275,7 @@ def get_campaign_sequences(
         try:
             data = get_with_retry(f"/campaigns/{campaign_id}/sequences", params)
         except RuntimeError as e:
-            print(f"Warning: failed sequences fetch for {campaign_id}: {e}")
+            logger.warning("failed sequences fetch for %s: %s", campaign_id, e)
             continue
 
         # Normalize to a list
@@ -274,7 +287,7 @@ def get_campaign_sequences(
             else:
                 sequences_raw = [data]
         else:
-            print(f"Warning: unexpected sequences format for campaign {campaign_id}")
+            logger.warning("unexpected sequences format for campaign %s", campaign_id)
             continue
 
         sequences = []
@@ -321,10 +334,11 @@ def get_variant_statistics(
         api_key: SmartLead API key
 
     Returns:
-        Dictionary mapping campaign_id -> sequence_id -> variant_id -> metrics
+        Dictionary mapping campaign_id -> sequence_id -> variant_id -> metrics.
+        Returns empty dict for campaigns that fail.
 
     Raises:
-        RuntimeError: If API request fails
+        RuntimeError: If API request fails for all campaigns
     """
     variant_stats_by_campaign = {}
 
@@ -334,12 +348,12 @@ def get_variant_statistics(
         try:
             data = get_with_retry(f"/campaigns/{campaign_id}/variant-statistics", params)
         except RuntimeError as e:
-            print(f"Warning: failed variant statistics for {campaign_id}: {e}")
+            logger.warning("failed variant statistics for %s: %s", campaign_id, e)
             variant_stats_by_campaign[campaign_id] = {}
             continue
 
         if not isinstance(data, dict) or not data.get("ok"):
-            print(f"Warning: unexpected variant statistics format for {campaign_id}")
+            logger.warning("unexpected variant statistics format for %s", campaign_id)
             variant_stats_by_campaign[campaign_id] = {}
             continue
 
